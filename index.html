@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b6e5f">
+<link rel="manifest" href="manifest.json"><link rel="icon" href="icon-192.png">
+<title>Pill Tracker</title>
+<style>
+:root{--bg:#f6f8f7;--card:#fff;--tx:#10201c;--mut:#5a6b66;--pri:#0b6e5f;--onpri:#fff;--ok:#2e7d32;--warn:#e65100;--bad:#c62828;--bd:#dbe3e0}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1513;--card:#17211e;--tx:#e8f0ed;--mut:#9bb0aa;--pri:#4fd1b8;--onpri:#04211c;--ok:#81c784;--warn:#ffb74d;--bad:#ef9a9a;--bd:#2a3a35}}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font:17px/1.4 system-ui,sans-serif;padding:env(safe-area-inset-top) 0 calc(76px + env(safe-area-inset-bottom))}
+header{padding:16px 16px 4px}h1{margin:0;font-size:26px}h2{font-size:19px;margin:20px 0 8px}
+main{padding:0 16px;max-width:640px;margin:auto}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:14px;margin:10px 0;display:grid;grid-template-columns:auto 1fr;gap:10px 12px;align-items:center}
+.card.TAKEN,.card.SKIPPED{opacity:.7}.card.LATE{border-color:var(--warn);border-width:2px}
+.ic{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;font-size:24px}
+.inf span,.inf small{display:block;color:var(--mut)}.inf b{font-size:18px}
+.act,.st,.tag{grid-column:1/-1}.act{display:flex;gap:8px}.st{color:var(--ok);font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.tag{color:var(--warn);font-weight:600}
+button{font:inherit;cursor:pointer;border-radius:14px;border:1px solid var(--bd);background:var(--card);color:var(--tx);min-height:48px;padding:0 16px}
+.big{background:var(--pri);color:var(--onpri);border:0;min-height:60px;font-size:19px;font-weight:700;flex:1}
+.add{width:100%;margin-top:8px}.sec{flex:0 0 auto}.dan{color:var(--bad)}.lnk{border:0;background:none;color:var(--pri);text-decoration:underline;min-height:44px}
+.prog{margin:8px 0}.bar{height:12px;background:var(--bd);border-radius:6px;overflow:hidden;margin-top:6px}.bar i{display:block;height:100%;background:var(--ok)}
+.alert,.next{padding:12px;border-radius:14px;margin:10px 0;font-weight:600}.alert{background:var(--warn);color:#fff}.next{background:var(--card);border:1px solid var(--bd)}
+.fm{display:grid;gap:12px}.fm label,.fl{display:grid;gap:4px;color:var(--mut)}
+input,select{font:inherit;min-height:48px;border-radius:12px;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:0 12px;width:100%}
+input[type=color]{padding:2px}.tr{display:flex;gap:8px;margin-bottom:6px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;text-align:center}.cal i{font-style:normal;color:var(--mut);font-size:13px}
+.day{min-height:44px;padding:0;border-radius:50%}.day.ok{background:var(--ok);color:#fff}.day.part{background:var(--warn);color:#fff}.day.bad{background:var(--bad);color:#fff}.day.sel{outline:3px solid var(--pri)}
+.mh{display:flex;justify-content:space-between;align-items:center;margin:8px 0}
+.row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bd)}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;border-radius:0;min-height:64px;font-size:13px;background:none;color:var(--mut)}nav button.on{color:var(--pri);font-weight:700}
+nav button span{display:block;font-size:22px}
+#snack{position:fixed;left:12px;right:12px;bottom:calc(80px + env(safe-area-inset-bottom));background:#222;color:#fff;border-radius:12px;padding:10px 14px;display:none;justify-content:space-between;align-items:center}
+#snack button{background:none;border:0;color:#7fe0cd;font-weight:700}
+.set button{width:100%;margin:6px 0;text-align:left}.muted{color:var(--mut);font-size:15px}
+</style></head><body>
+<header><h1 id="ttl"></h1></header><main id="app"></main>
+<nav id="nav"></nav><div id="snack"></div>
+<script>
+const K='pilltracker_v1',$=s=>document.querySelector(s),pad=n=>String(n).padStart(2,'0');
+const ymd=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const SH={caps:'💊',round:'⚪',liquid:'🧴',inj:'💉',patch:'🩹',other:'🔵'},SN={caps:'Cápsula',round:'Comprimido',liquid:'Líquido',inj:'Inyección',patch:'Parche',other:'Otro'};
+const PARTS=['☀️ Mañana','🌤 Tarde','🌙 Noche'],part=t=>{const h=+t.slice(0,2);return h>=5&&h<12?0:h>=12&&h<19?1:2};
+const ST={TAKEN:'✓ Tomada',SKIPPED:'⏭ Omitida',MISSED:'✗ Olvidada',LATE:'⚠ Atrasada',PENDING:'⏰ Pendiente'};
+const TABS=[['today','💊','Hoy'],['meds','🗂','Medicinas'],['hist','📅','Historial'],['set','⚙️','Ajustes']];
+let db=(()=>{try{return JSON.parse(localStorage.getItem(K))||{meds:[],logs:{}}}catch{return{meds:[],logs:{}}}})();
+let tab='today',form=null,vm=new Date(),sel=null;
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(db))}catch{alert('No se pudo guardar los datos')}};
+
+function dosesOf(day){const now=new Date(),today=ymd(now);
+ return db.meds.filter(m=>m.start<=day).flatMap(m=>m.times.map(t=>{
+  const id=`${m.id}|${day}|${t}`,l=db.logs[id];
+  const s=l?l.s:(new Date(`${day}T${t}`)<now?(day<today?'MISSED':'LATE'):'PENDING');
+  return{id,m,t,s,at:l?.at,day}})).sort((a,b)=>a.t.localeCompare(b.t))}
+
+function snack(msg,undo){const s=$('#snack');s.innerHTML=`<span>${msg}</span>${undo?'<button id="un">Deshacer</button>':''}`;s.style.display='flex';
+ if(undo)$('#un').onclick=()=>{undo();s.style.display='none'};clearTimeout(snack.t);snack.t=setTimeout(()=>s.style.display='none',6000)}
+function mark(id,s){const prev=db.logs[id];db.logs[id]={s,at:Date.now()};save();
+ navigator.vibrate?.(s==='TAKEN'?40:[20,50,20]);render();
+ snack(s==='TAKEN'?'✓ Marcada como tomada':'⏭ Marcada como omitida',()=>{prev?db.logs[id]=prev:delete db.logs[id];save();render()})}
+
+function card(d){const m=d.m,done=d.s==='TAKEN'||d.s==='SKIPPED',id=esc(d.id);
+ return`<div class="card ${d.s}"><div class="ic" style="background:${esc(m.color)}">${SH[m.shape]||'💊'}</div>
+ <div class="inf"><b>${esc(m.name)}</b><span>${esc(m.dose)} · ${d.t}</span>${m.notes?`<small>${esc(m.notes)}</small>`:''}</div>
+ ${done?`<div class="st"><span>${ST[d.s]}</span><button class="lnk" data-a="undo" data-id="${id}">Deshacer</button></div>`
+ :`${d.s==='LATE'?'<div class="tag">⚠ Atrasada</div>':''}<div class="act"><button class="big" data-a="take" data-id="${id}">✓ Tomada</button><button class="sec" data-a="skip" data-id="${id}">⏭ Omitir</button></div>`}</div>`}
+
+function vToday(){const day=ymd(new Date()),ds=dosesOf(day);
+ if(!db.meds.length)return'<p>Aún no tienes medicamentos.</p><button class="big add" data-a="goadd">＋ Añadir el primero</button>';
+ const done=ds.filter(d=>d.s==='TAKEN').length,late=ds.filter(d=>d.s==='LATE'),next=ds.find(d=>d.s==='PENDING');
+ let h=`<div class="prog"><b>${done} de ${ds.length} tomadas hoy</b><div class="bar"><i style="width:${ds.length?done/ds.length*100:0}%"></i></div></div>`;
+ if(late.length)h+=`<div class="alert">⚠ Te falta tomar: ${late.map(d=>esc(d.m.name)+' ('+d.t+')').join(', ')}</div>`;
+ else if(next)h+=`<div class="next">⏰ Próxima: <b>${esc(next.m.name)}</b> a las ${next.t}</div>`;
+ else if(ds.length)h+='<div class="next">🎉 Todo al día por hoy</div>';
+ [0,1,2].forEach(p=>{const l=ds.filter(d=>part(d.t)===p);if(l.length)h+=`<h2>${PARTS[p]}</h2>`+l.map(card).join('')});return h}
+
+function vMeds(){if(form)return vForm();
+ return'<button class="big add" data-a="new">＋ Añadir medicamento</button>'+db.meds.map(m=>`<div class="card"><div class="ic" style="background:${esc(m.color)}">${SH[m.shape]||'💊'}</div>
+ <div class="inf"><b>${esc(m.name)}</b><span>${esc(m.dose)}</span><small>${m.times.join(' · ')}</small></div>
+ <div class="act"><button class="sec" data-a="edit" data-id="${m.id}">Editar</button><button class="sec dan" data-a="del" data-id="${m.id}">Eliminar</button></div></div>`).join('')}
+
+function vForm(){const f=form;return`<h2>${f.id?'Editar':'Nuevo'} medicamento</h2><div class="fm">
+<label>Nombre<input id="f_name" value="${esc(f.name)}" placeholder="Metformina"></label>
+<label>Dosis<input id="f_dose" value="${esc(f.dose)}" placeholder="850 mg"></label>
+<label>Forma<select id="f_shape">${Object.keys(SH).map(k=>`<option value="${k}" ${f.shape===k?'selected':''}>${SH[k]} ${SN[k]}</option>`).join('')}</select></label>
+<label>Color<input type="color" id="f_color" value="${f.color}"></label>
+<div class="fl"><span>Horarios</span>${f.times.map((t,i)=>`<div class="tr"><input type="time" class="f_t" value="${t}"><button class="sec" data-a="rmt" data-id="${i}">✕</button></div>`).join('')}<button data-a="addt">＋ Añadir horario</button></div>
+<label>Notas<input id="f_notes" value="${esc(f.notes)}" placeholder="Con comida"></label>
+<div class="act"><button class="big" data-a="savem">Guardar</button><button class="sec" data-a="cancel">Cancelar</button></div></div>`}
+function sync(){if(!form||!$('#f_name'))return;Object.assign(form,{name:$('#f_name').value,dose:$('#f_dose').value,shape:$('#f_shape').value,color:$('#f_color').value,notes:$('#f_notes').value,times:[...document.querySelectorAll('.f_t')].map(i=>i.value).filter(Boolean)})}
+
+function vHist(){const y=vm.getFullYear(),mo=vm.getMonth(),n=new Date(y,mo+1,0).getDate(),off=(new Date(y,mo,1).getDay()+6)%7,today=ymd(new Date());
+ let c='LMXJVSD'.split('').map(x=>`<i>${x}</i>`).join('')+'<i></i>'.repeat(off),tk=0,tt=0;
+ for(let d=1;d<=n;d++){const k=`${y}-${pad(mo+1)}-${pad(d)}`,ds=k>today?[]:dosesOf(k),t=ds.filter(x=>x.s==='TAKEN').length;
+  if(k<=today){tk+=t;tt+=ds.length}
+  const cl=!ds.length?'':t===ds.length?'ok':t>0?'part':k<today?'bad':'';
+  c+=`<button class="day ${cl} ${k===sel?'sel':''}" data-a="day" data-id="${k}">${d}</button>`}
+ let h=`<div class="mh"><button data-a="pm">‹</button><b>${vm.toLocaleDateString('es',{month:'long',year:'numeric'})}</b><button data-a="nm">›</button></div><div class="cal">${c}</div>
+ <p class="muted">🟢 todo tomado · 🟠 parcial · 🔴 ninguna tomada · Adherencia del mes: <b>${tt?Math.round(tk/tt*100)+'%':'—'}</b></p>`;
+ if(sel)h+=`<h2>${sel}</h2>`+(dosesOf(sel).map(d=>`<div class="row"><span>${d.t} · ${esc(d.m.name)} ${esc(d.m.dose)}</span><b>${ST[d.s]}</b></div>`).join('')||'<p class="muted">Sin tomas ese día.</p>');return h}
+
+function vSet(){const np='Notification'in window?Notification.permission:'no disponible';
+ return`<div class="set"><h2>Recordatorios</h2><button data-a="notif">🔔 Activar notificaciones (${np})</button>
+ <p class="muted">Las notificaciones de la app solo suenan con la app abierta o recién usada. Para alarmas fiables, exporta a Google Calendar.</p>
+ <button data-a="ics">📆 Exportar horarios a Google Calendar (.ics)</button>
+ <h2>Datos</h2><button data-a="json">💾 Exportar copia (JSON)</button><button data-a="csv">📊 Exportar historial (CSV)</button>
+ <button data-a="imp">📥 Importar copia (JSON)</button><input type="file" id="file" accept=".json" hidden>
+ <p class="muted">Tus datos viven solo en este navegador. Haz copias con frecuencia. Ayuda médica: esta app no sustituye consejo profesional.</p></div>`}
+
+function dl(name,type,txt){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
+function csv(){const rows=[['fecha','hora','medicamento','dosis','estado','registrado']];
+ const min=db.meds.map(m=>m.start).sort()[0]||ymd(new Date());
+ for(let d=new Date(min+'T00:00');ymd(d)<=ymd(new Date());d.setDate(d.getDate()+1))dosesOf(ymd(d)).forEach(x=>rows.push([x.day,x.t,x.m.name,x.m.dose,x.s,x.at?new Date(x.at).toLocaleString():'']));
+ dl('pilltracker-historial.csv','text/csv',rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n'))}
+function ics(){const z=ymd(new Date()).replace(/-/g,''),L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//PillTracker//ES'];
+ db.meds.forEach(m=>m.times.forEach(t=>L.push('BEGIN:VEVENT',`UID:${m.id}-${t.replace(':','')}@pilltracker`,`DTSTAMP:${z}T000000Z`,`DTSTART:${z}T${t.replace(':','')}00`,'DURATION:PT5M','RRULE:FREQ=DAILY',`SUMMARY:💊 ${(m.name+' '+m.dose).replace(/[,;\n]/g,' ')}`,'BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:Tomar medicación','TRIGGER:PT0M','END:VALARM','END:VEVENT')));
+ L.push('END:VCALENDAR');dl('pilltracker.ics','text/calendar',L.join('\r\n'))}
+
+const notified=new Set(JSON.parse(sessionStorage.getItem('nt')||'[]'));
+async function tick(){if(!('Notification'in window)||Notification.permission!=='granted'||!navigator.serviceWorker)return;
+ const reg=await navigator.serviceWorker.ready,now=new Date();
+ for(const d of dosesOf(ymd(now)))if(d.s==='LATE'&&!notified.has(d.id)&&now-new Date(`${d.day}T${d.t}`)<2*36e5){
+  notified.add(d.id);sessionStorage.setItem('nt',JSON.stringify([...notified]));
+  reg.showNotification('💊 '+d.m.name,{body:`${d.m.dose} · ${d.t}`,tag:d.id,data:{id:d.id},requireInteraction:true,vibrate:[200,100,200],icon:'icon-192.png',actions:[{action:'taken',title:'✓ Tomada'}]})}}
+
+function render(){$('#ttl').textContent={today:'Hoy',meds:'Medicamentos',hist:'Historial',set:'Ajustes'}[tab];
+ $('#nav').innerHTML=TABS.map(([k,i,l])=>`<button class="${k===tab?'on':''}" data-a="tab" data-id="${k}"><span>${i}</span>${l}</button>`).join('');
+ $('#app').innerHTML={today:vToday,meds:vMeds,hist:vHist,set:vSet}[tab]()}
+
+document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a,id=b.dataset.id;sync();
+ const blank=()=>({name:'',dose:'',shape:'caps',color:'#2196f3',times:['08:00'],notes:''});
+ switch(a){
+  case'tab':tab=id;form=null;break;
+  case'take':return mark(id,'TAKEN');case'skip':return mark(id,'SKIPPED');
+  case'undo':{const p=db.logs[id];delete db.logs[id];save();snack('Registro deshecho',()=>{db.logs[id]=p;save();render()});break}
+  case'goadd':tab='meds';form=blank();break;case'new':form=blank();break;
+  case'edit':form={...db.meds.find(m=>m.id===id)};form.times=[...form.times];break;
+  case'del':if(confirm('¿Eliminar este medicamento? El historial dejará de mostrarlo.'))db.meds=db.meds.filter(m=>m.id!==id),save();break;
+  case'addt':form.times.push('12:00');break;case'rmt':form.times.splice(+id,1);break;case'cancel':form=null;break;
+  case'savem':if(!form.name.trim()||!form.times.length){alert('Indica nombre y al menos un horario');return}
+   form.times=[...new Set(form.times)].sort();
+   if(form.id)db.meds=db.meds.map(m=>m.id===form.id?{...m,...form}:m);else db.meds.push({...form,id:Date.now().toString(36),start:ymd(new Date())});
+   save();form=null;break;
+  case'pm':vm=new Date(vm.getFullYear(),vm.getMonth()-1,1);break;case'nm':vm=new Date(vm.getFullYear(),vm.getMonth()+1,1);break;
+  case'day':sel=id;break;
+  case'notif':Notification.requestPermission().then(render);return;
+  case'ics':ics();return;case'json':dl('pilltracker-backup.json','application/json',JSON.stringify(db));return;case'csv':csv();return;
+  case'imp':$('#file').click();return}
+ render()});
+document.addEventListener('change',e=>{if(e.target.id!=='file')return;const f=e.target.files[0];if(!f)return;
+ f.text().then(t=>{try{const d=JSON.parse(t);if(!Array.isArray(d.meds)||typeof d.logs!=='object')throw 0;
+  if(confirm('Esto reemplazará tus datos actuales. ¿Continuar?')){db=d;save();render();snack('✓ Copia importada')}}catch{alert('Archivo no válido')}})});
+
+const p=new URLSearchParams(location.search);
+if(p.get('mark')){const i=p.get('mark');history.replaceState(null,'',location.pathname);if(dosesOf(ymd(new Date())).some(d=>d.id===i))mark(i,'TAKEN')}
+render();navigator.storage?.persist?.();navigator.serviceWorker?.register('sw.js');
+setInterval(()=>{tick();if(!document.hidden&&tab==='today')render()},30000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){tick();if(tab==='today')render()}});
+</script></body></html>
