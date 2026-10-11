@@ -12,7 +12,7 @@ body{background:var(--bg);color:var(--tx);font:17px/1.4 system-ui,sans-serif;pad
 header{padding:16px 16px 4px}h1{margin:0;font-size:26px}h2{font-size:19px;margin:20px 0 8px}
 main{padding:0 16px;max-width:640px;margin:auto}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:14px;margin:10px 0;display:grid;grid-template-columns:auto 1fr;gap:10px 12px;align-items:center}
-.card.TAKEN,.card.SKIPPED{opacity:.7}.card.LATE{border-color:var(--warn);border-width:2px}
+.card.TAKEN,.card.SKIPPED{opacity:.7}.card.LATE{border-color:var(--warn);border-width:2px}.card.MISSED{border-color:var(--bad);border-width:2px}.card.MISSED .tag{color:var(--bad)}
 .ic{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;font-size:24px}
 .inf span,.inf small{display:block;color:var(--mut)}.inf b{font-size:18px}
 .act,.st,.tag{grid-column:1/-1}.act{display:flex;gap:8px}.st{color:var(--ok);font-weight:600;display:flex;justify-content:space-between;align-items:center}
@@ -45,7 +45,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const SH={caps:'💊',round:'⚪',liquid:'🧴',inj:'💉',patch:'🩹',other:'🔵'},SN={caps:'Cápsula',round:'Comprimido',liquid:'Líquido',inj:'Inyección',patch:'Parche',other:'Otro'};
 const PARTS=['☀️ Mañana','🌤 Tarde','🌙 Noche'],part=t=>{const h=+t.slice(0,2);return h>=5&&h<12?0:h>=12&&h<19?1:2};
 const ST={TAKEN:'✓ Tomada',SKIPPED:'⏭ Omitida',MISSED:'✗ Olvidada',LATE:'⚠ Atrasada',PENDING:'⏰ Pendiente'};
-const TABS=[['today','💊','Hoy'],['meds','🗂','Medicinas'],['hist','📅','Historial'],['set','⚙️','Ajustes']];
+const TABS=[['today','💊','Hoy'],['meds','🗂','Medicinas'],['set','⚙️','Ajustes']];
 let db=(()=>{try{return JSON.parse(localStorage.getItem(K))||{meds:[],logs:{}}}catch{return{meds:[],logs:{}}}})();
 let tab='today',form=null,vm=new Date(),sel=null;
 const save=()=>{try{localStorage.setItem(K,JSON.stringify(db))}catch{alert('No se pudo guardar los datos')}};
@@ -66,16 +66,19 @@ function card(d){const m=d.m,done=d.s==='TAKEN'||d.s==='SKIPPED',id=esc(d.id);
  return`<div class="card ${d.s}"><div class="ic" style="background:${esc(m.color)}">${SH[m.shape]||'💊'}</div>
  <div class="inf"><b>${esc(m.name)}</b><span>${esc(m.dose)} · ${d.t}</span>${m.notes?`<small>${esc(m.notes)}</small>`:''}</div>
  ${done?`<div class="st"><span>${ST[d.s]}</span><button class="lnk" data-a="undo" data-id="${id}">Deshacer</button></div>`
- :`${d.s==='LATE'?'<div class="tag">⚠ Atrasada</div>':''}<div class="act"><button class="big" data-a="take" data-id="${id}">✓ Tomada</button><button class="sec" data-a="skip" data-id="${id}">⏭ Omitir</button></div>`}</div>`}
+ :`${d.s==='LATE'?'<div class="tag">⚠ Atrasada</div>':d.s==='MISSED'?'<div class="tag">✗ Sin registrar: ¿la tomaste?</div>':''}<div class="act"><button class="big" data-a="take" data-id="${id}">✓ Tomada</button><button class="sec" data-a="skip" data-id="${id}">⏭ Omitir</button></div>`}</div>`}
 
 function vToday(){const day=ymd(new Date()),ds=dosesOf(day);
  if(!db.meds.length)return'<p>Aún no tienes medicamentos.</p><button class="big add" data-a="goadd">＋ Añadir el primero</button>';
- const done=ds.filter(d=>d.s==='TAKEN').length,late=ds.filter(d=>d.s==='LATE'),next=ds.find(d=>d.s==='PENDING');
+ const yd=new Date();yd.setDate(yd.getDate()-1);const ys=dosesOf(ymd(yd)).filter(d=>d.s==='MISSED');
+ const done=ds.filter(d=>d.s==='TAKEN').length,late=ds.filter(d=>d.s==='LATE'),next=ds.find(d=>d.s==='PENDING'),miss=[...ys,...late];
  let h=`<div class="prog"><b>${done} de ${ds.length} tomadas hoy</b><div class="bar"><i style="width:${ds.length?done/ds.length*100:0}%"></i></div></div>`;
- if(late.length)h+=`<div class="alert">⚠ Te falta tomar: ${late.map(d=>esc(d.m.name)+' ('+d.t+')').join(', ')}</div>`;
+ if(miss.length)h+=`<div class="alert">⚠ Te falta tomar: ${miss.map(d=>esc(d.m.name)+' ('+(d.day===day?'':'ayer ')+d.t+')').join(', ')}</div>`;
  else if(next)h+=`<div class="next">⏰ Próxima: <b>${esc(next.m.name)}</b> a las ${next.t}</div>`;
  else if(ds.length)h+='<div class="next">🎉 Todo al día por hoy</div>';
- [0,1,2].forEach(p=>{const l=ds.filter(d=>part(d.t)===p);if(l.length)h+=`<h2>${PARTS[p]}</h2>`+l.map(card).join('')});return h}
+ if(ys.length)h+='<h2>🕘 Sin registrar de ayer</h2>'+ys.map(card).join('');
+ [0,1,2].forEach(p=>{const l=ds.filter(d=>part(d.t)===p);if(l.length)h+=`<h2>${PARTS[p]}</h2>`+l.map(card).join('')});
+ return h+'<h2>📅 Historial</h2>'+vHist()}
 
 function vMeds(){if(form)return vForm();
  return'<button class="big add" data-a="new">＋ Añadir medicamento</button>'+db.meds.map(m=>`<div class="card"><div class="ic" style="background:${esc(m.color)}">${SH[m.shape]||'💊'}</div>
@@ -100,7 +103,7 @@ function vHist(){const y=vm.getFullYear(),mo=vm.getMonth(),n=new Date(y,mo+1,0).
   c+=`<button class="day ${cl} ${k===sel?'sel':''}" data-a="day" data-id="${k}">${d}</button>`}
  let h=`<div class="mh"><button data-a="pm">‹</button><b>${vm.toLocaleDateString('es',{month:'long',year:'numeric'})}</b><button data-a="nm">›</button></div><div class="cal">${c}</div>
  <p class="muted">🟢 todo tomado · 🟠 parcial · 🔴 ninguna tomada · Adherencia del mes: <b>${tt?Math.round(tk/tt*100)+'%':'—'}</b></p>`;
- if(sel)h+=`<h2>${sel}</h2>`+(dosesOf(sel).map(d=>`<div class="row"><span>${d.t} · ${esc(d.m.name)} ${esc(d.m.dose)}</span><b>${ST[d.s]}</b></div>`).join('')||'<p class="muted">Sin tomas ese día.</p>');return h}
+ if(sel)h+=`<h2>${sel}</h2>`+((sel>today?[]:dosesOf(sel)).map(card).join('')||'<p class="muted">Sin tomas ese día.</p>');return h}
 
 function vSet(){const np='Notification'in window?Notification.permission:'no disponible';
  return`<div class="set"><h2>Recordatorios</h2><button data-a="notif">🔔 Activar notificaciones (${np})</button>
